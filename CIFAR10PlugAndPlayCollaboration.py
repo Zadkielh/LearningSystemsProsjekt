@@ -116,37 +116,78 @@ tm_thermometer_4 = TMClassifier(
     patch_dim=(4, 4),
 )
 
+
+############################
+#####  Edge Detection  #####
+############################
+
+# Using Canny Edge Detection
+X_train_edges = np.zeros_like(X_train_org)
+X_test_edges = np.zeros_like(X_test_org)
+
+for i in range(X_train_edges.shape[0]):
+    for j in range(X_train_edges.shape[3]):
+        X_train_edges[i, :, :, j] = cv2.Canny(X_train_org[i, :, :, j], 100, 200)
+
+for i in range(X_test_edges.shape[0]):
+    for j in range(X_test_edges.shape[3]):
+        X_test_edges[i, :, :, j] = cv2.Canny(X_test_org[i, :, :, j], 100, 200)
+
+tm_edges = TMClassifier(
+    number_of_clauses=2000*factor,
+    T=500*factor,
+    s=10.0,
+    max_included_literals=max_included_literals,
+    platform=device,
+    weighted_clauses=True,
+    patch_dim=(10, 10)
+)
+
+
+
+
 ############################
 ##### Training of Team #####
 ############################
 
 for epoch in range(100):
     print("#%d" % (epoch+1), end=' ')
+    
+    # Training and predicting with Histogram of Gradients
     tm_hog.fit(X_train_hog, Y_train)
     Y_test_hog, Y_test_scores_hog = tm_hog.predict(X_test_hog, return_class_sums=True)
     print("HoG: %.1f%%" % (100*(Y_test_hog == Y_test).mean()), end=' ')
 
+    # Training and predicting with Adaptive Thresholding
     tm_threshold.fit(X_train_threshold, Y_train)
     Y_test_threshold, Y_test_scores_threshold = tm_threshold.predict(X_test_threshold, return_class_sums=True)
     print("Adaptive Thresholding: %.1f%%" % (100*(Y_test_threshold == Y_test).mean()), end=' ')
 
+    # Training and predicting with 3x3 Color Thermometers
     tm_thermometer_3.fit(X_train_thermometer, Y_train)
     Y_test_thermometer_3, Y_test_scores_thermometer_3 = tm_thermometer_3.predict(X_test_thermometer, return_class_sums=True)
     print("3x3 Color Thermometers: %.1f%%" % (100*(Y_test_thermometer_3 == Y_test).mean()), end=' ')
 
+    # Training and predicting with 4x4 Color Thermometers
     tm_thermometer_4.fit(X_train_thermometer, Y_train)
     Y_test_thermometer_4, Y_test_scores_thermometer_4 = tm_thermometer_4.predict(X_test_thermometer, return_class_sums=True)
     print("4x4 Color Thermometers: %.1f%%" % (100*(Y_test_thermometer_4 == Y_test).mean()), end=' ')
 
-    ##### Team Decision #####
-
+    # Training and predicting with Edge Detection
+    tm_edges.fit(X_train_edges, Y_train)
+    Y_test_edges, Y_test_scores_edges = tm_edges.predict(X_test_edges, return_class_sums=True)
+    print("Edges: %.1f%%" % (100*(Y_test_edges == Y_test).mean()), end=' ')
+    
+    ### Team Decision ###
+    
     votes = np.zeros(Y_test_scores_hog.shape, dtype=np.float32)
     for i in range(Y_test.shape[0]):
         votes[i] += 1.0*Y_test_scores_threshold[i]/(np.max(Y_test_scores_threshold) - np.min(Y_test_scores_threshold))
         votes[i] += 1.0*Y_test_scores_thermometer_3[i]/(np.max(Y_test_scores_thermometer_3) - np.min(Y_test_scores_thermometer_3))
         votes[i] += 1.0*Y_test_scores_thermometer_4[i]/(np.max(Y_test_scores_thermometer_4) - np.min(Y_test_scores_thermometer_4))
         votes[i] += 1.0*Y_test_scores_hog[i]/(np.max(Y_test_scores_hog) - np.min(Y_test_scores_hog))
+        votes[i] += 1.0*Y_test_scores_edges[i]/(np.max(Y_test_scores_edges) - np.min(Y_test_scores_edges))
+        
     Y_test_team = votes.argmax(axis=1)
-
     print("Team: %.1f%%" % (100*(Y_test_team == Y_test).mean()))
     print()
